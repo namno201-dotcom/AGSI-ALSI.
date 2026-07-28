@@ -70,7 +70,7 @@
 
 <h2>LNG send-out <span class="section-tag">ALSI &middot; GWh/day</span></h2>
 <div class="chart-wrap">
-  <canvas id="lngChart" role="img" aria-label="Line chart of daily LNG terminal send-out for Germany, Belgium and Netherlands"></canvas>
+  <canvas id="lngChart" role="img" aria-label="Bar chart of daily LNG terminal send-out for Germany, Belgium and Netherlands"></canvas>
 </div>
 <p class="note">Send-out = gas flow leaving the LNG terminal after regasification. Germany currently reports no active LNG terminal in this dataset, so its line will stay flat at zero — this does not indicate a data error.</p>
 
@@ -87,6 +87,32 @@
   </thead>
   <tbody></tbody>
 </table>
+
+<h2>Methodology & data provenance</h2>
+<div class="insight">
+  <p><b>Source data:</b> all figures come directly from the official GIE (Gas Infrastructure Europe)
+  transparency platforms &mdash; <a href="https://agsi.gie.eu" target="_blank" rel="noopener">AGSI+</a>
+  for underground gas storage and <a href="https://alsi.gie.eu" target="_blank" rel="noopener">ALSI</a>
+  for LNG terminals. Anyone can independently verify any number on this page by looking up the same
+  country and date on those public platforms.</p>
+
+  <p><b>Formulas used:</b><br>
+  &bull; Storage fill level = <code>gasInStorage &divide; workingGasVolume &times; 100</code><br>
+  &bull; LNG terminal utilisation = <code>sendOut &divide; dtrs &times; 100</code> (dtrs = Declared Total
+  Reference Send-out, the terminal's declared maximum capacity)<br>
+  These are the field definitions published in GIE's official API documentation, not custom calculations.</p>
+
+  <p><b>Update pipeline:</b> a GitHub Actions workflow calls the AGSI+/ALSI API once per day and commits
+  the raw response as <code>data.json</code> in this repository. This page reads that file directly and
+  performs no manual data entry at any step.<br>
+  &bull; <a href="https://github.com/namno201-dotcom/gas-dashboard/blob/main/data.json" target="_blank" rel="noopener">View the raw data.json on GitHub</a><br>
+  &bull; <a href="https://github.com/namno201-dotcom/gas-dashboard/commits/main/data.json" target="_blank" rel="noopener">View the full update history (every daily commit, timestamped)</a></p>
+
+  <p><b>Known limitation:</b> Germany does not currently report an active LNG terminal to ALSI, so its
+  LNG figures show as zero/blank &mdash; this reflects the underlying data, not a pipeline error. GIE
+  publishes each day's figures with a delay (typically available the following morning), so the most
+  recent 1&ndash;2 days may lag behind the calendar date.</p>
+</div>
 
 <script>
 const COUNTRIES = [
