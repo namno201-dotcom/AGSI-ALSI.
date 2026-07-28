@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>European Gas Storage Dashboard — DE / BE / NL</title>
+<title>European Gas & LNG Dashboard — DE / BE / NL</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/luxon/3.4.4/luxon.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-luxon/1.3.1/chartjs-adapter-luxon.umd.min.js"></script>
@@ -32,6 +32,7 @@
   .trend.up{color:#8fd6ab;} .trend.down{color:#f0a0a0;}
   .card .meta{font-size:11px; color:var(--muted); margin-top:6px;}
   h2{font-size:15px; font-weight:500; margin:32px 0 12px; color:var(--text);}
+  h2 .section-tag{font-size:11px; color:var(--muted); font-weight:400; margin-left:8px;}
   .chart-wrap{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; position:relative; height:340px;}
   .legend{display:flex; gap:16px; font-size:12px; color:var(--muted); margin-bottom:8px;}
   .legend span{display:flex; align-items:center; gap:5px;}
@@ -40,21 +41,24 @@
     padding:16px 20px; font-size:14px; line-height:1.6; color:var(--text); margin-top:12px;
   }
   .insight b{color:#fff;}
+  .insight p{margin:0 0 10px;}
+  .insight p:last-child{margin-bottom:0;}
   table{width:100%; border-collapse:collapse; font-size:13px; margin-top:12px;}
   th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);}
   th{color:var(--muted); font-weight:500;}
+  .note{font-size:12px; color:var(--muted); margin-top:6px;}
 </style>
 </head>
 <body>
 
-<h1>European gas storage dashboard</h1>
-<p class="sub">Germany · Belgium · Netherlands — source: GIE AGSI+ · data refreshed daily via GitHub Actions since 2026-01-01</p>
+<h1>European gas & LNG dashboard</h1>
+<p class="sub">Germany · Belgium · Netherlands — source: GIE AGSI+ (storage) and ALSI (LNG terminals) · data refreshed daily via GitHub Actions since 2026-01-01</p>
 
 <div id="statusBox" class="status">Loading data.json...</div>
 
 <div class="cards" id="cardsRow"></div>
 
-<h2>Storage fill level (%) — since 1 Jan 2026</h2>
+<h2>Storage fill level (%) <span class="section-tag">AGSI &middot; since 1 Jan 2026</span></h2>
 <div class="legend">
   <span><span class="dot" style="background:var(--de)"></span>Germany</span>
   <span><span class="dot" style="background:var(--be)"></span>Belgium</span>
@@ -64,10 +68,11 @@
   <canvas id="fullChart" role="img" aria-label="Line chart of gas storage fill percentage for Germany, Belgium and Netherlands since January 2026"></canvas>
 </div>
 
-<h2>Daily net flow (injection minus withdrawal, GWh/day)</h2>
+<h2>LNG send-out <span class="section-tag">ALSI &middot; GWh/day</span></h2>
 <div class="chart-wrap">
-  <canvas id="netChart" role="img" aria-label="Bar chart of daily net gas flow for Germany, Belgium and Netherlands"></canvas>
+  <canvas id="lngChart" role="img" aria-label="Bar chart of daily LNG terminal send-out for Germany, Belgium and Netherlands"></canvas>
 </div>
+<p class="note">Send-out = gas flow leaving the LNG terminal after regasification. A country with no active LNG terminal will show flat zero — this does not indicate a data error.</p>
 
 <h2>Insights</h2>
 <div class="insight" id="insightBox">Calculating...</div>
@@ -75,7 +80,10 @@
 <h2>Latest snapshot</h2>
 <table id="snapshotTable">
   <thead>
-    <tr><th>Country</th><th>Date</th><th>Full (%)</th><th>Trend (%/day)</th><th>Storage (TWh)</th><th>Capacity (TWh)</th><th>Status</th></tr>
+    <tr>
+      <th>Country</th><th>Date</th><th>Storage full (%)</th><th>Storage trend (%/day)</th>
+      <th>LNG send-out (GWh/d)</th><th>LNG terminal utilisation (%)</th>
+    </tr>
   </thead>
   <tbody></tbody>
 </table>
@@ -93,22 +101,40 @@ function statusMsg(text, type){
   box.className = "status" + (type ? " " + type : "");
 }
 
-function renderCards(latest){
+function num(v, fallback){
+  const n = parseFloat(v);
+  return isNaN(n) ? (fallback ?? 0) : n;
+}
+
+function lngUtilisation(row){
+  if(!row) return null;
+  const sendOut = num(row.sendOut, null);
+  const dtrs = num(row.dtrs, null);
+  if(sendOut === null || !dtrs) return null;
+  return (sendOut / dtrs) * 100;
+}
+
+function renderCards(latest, alsiLatest){
   const row = document.getElementById("cardsRow");
   row.innerHTML = "";
   COUNTRIES.forEach(c => {
     const d = latest[c.code];
     if(!d) return;
-    const full = parseFloat(d.full).toFixed(2);
-    const trend = parseFloat(d.trend);
+    const full = num(d.full).toFixed(2);
+    const trend = num(d.trend);
     const cls = trend >= 0 ? "up" : "down";
-    const arrow = trend >= 0 ? "▲" : "▼";
+    const arrow = trend >= 0 ? "\u25B2" : "\u25BC";
+
+    const lng = alsiLatest[c.code];
+    const util = lngUtilisation(lng);
+    const utilText = util !== null ? util.toFixed(0) + "% terminal utilisation" : "no active LNG terminal";
+
     row.insertAdjacentHTML("beforeend", `
       <div class="card">
         <div class="label"><span class="dot" style="background:${c.color}"></span>${c.name}</div>
         <div class="value">${full}%</div>
-        <div class="trend ${cls}">${arrow} ${Math.abs(trend).toFixed(2)}%/day</div>
-        <div class="meta">as of ${d.gasDayStart} · status: ${d.status}</div>
+        <div class="trend ${cls}">${arrow} ${Math.abs(trend).toFixed(2)}%/day storage</div>
+        <div class="meta">as of ${d.gasDayStart} &middot; LNG: ${utilText}</div>
       </div>
     `);
   });
@@ -120,7 +146,7 @@ function renderFullChart(series){
     const rows = (series[c.code] || []).slice().reverse();
     return {
       label: c.name,
-      data: rows.map(r => ({x: r.gasDayStart, y: parseFloat(r.full)})),
+      data: rows.map(r => ({x: r.gasDayStart, y: num(r.full)})),
       borderColor: c.color,
       backgroundColor: c.color + "1a",
       borderWidth: 2,
@@ -132,8 +158,7 @@ function renderFullChart(series){
     type: "line",
     data: { datasets },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { type: "time", time: { unit: "month" }, grid: { display:false }, ticks:{ color:"#9098a8" } },
@@ -143,13 +168,13 @@ function renderFullChart(series){
   });
 }
 
-function renderNetChart(series){
-  const ctx = document.getElementById("netChart");
+function renderLngChart(alsiSeries){
+  const ctx = document.getElementById("lngChart");
   const datasets = COUNTRIES.map(c => {
-    const rows = (series[c.code] || []).slice().reverse();
+    const rows = (alsiSeries[c.code] || []).slice().reverse();
     return {
       label: c.name,
-      data: rows.map(r => ({x: r.gasDayStart, y: parseFloat(r.injection) - parseFloat(r.withdrawal)})),
+      data: rows.map(r => ({x: r.gasDayStart, y: num(r.sendOut)})),
       borderColor: c.color,
       backgroundColor: c.color,
       borderWidth: 0
@@ -159,65 +184,81 @@ function renderNetChart(series){
     type: "bar",
     data: { datasets },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { type: "time", time: { unit: "month" }, grid: { display:false }, ticks:{ color:"#9098a8" }, stacked:false },
-        y: { ticks:{ color:"#9098a8", callback:v=>v+" GWh" }, grid:{ color:"#2a2e38" } }
+        x: { type: "time", time: { unit: "month" }, grid: { display:false }, ticks:{ color:"#9098a8" } },
+        y: { ticks:{ color:"#9098a8", callback:v=>v+" GWh/d" }, grid:{ color:"#2a2e38" } }
       }
     }
   });
 }
 
-function renderInsights(latest, series){
+function renderInsights(latest, series, alsiLatest, alsiSeries){
   const box = document.getElementById("insightBox");
-  const stats = COUNTRIES.map(c => {
+  const paragraphs = [];
+
+  const storageStats = COUNTRIES.map(c => {
     const rows = series[c.code] || [];
     if(rows.length < 2) return null;
-    const firstRow = rows[rows.length - 1];
-    const lastRow = rows[0];
-    const startFull = parseFloat(firstRow.full);
-    const endFull = parseFloat(lastRow.full);
-    const change = endFull - startFull;
-    return {name: c.name, change, endFull, trend: parseFloat(latest[c.code]?.trend || 0)};
+    const startFull = num(rows[rows.length - 1].full);
+    const endFull = num(rows[0].full);
+    return {name: c.name, change: endFull - startFull, endFull, trend: num(latest[c.code] && latest[c.code].trend)};
   }).filter(Boolean);
 
-  if(stats.length === 0){
-    box.textContent = "Not enough data yet to compute insights.";
-    return;
+  if(storageStats.length){
+    const highest = storageStats.reduce((a,b) => b.endFull > a.endFull ? b : a);
+    const lowest = storageStats.reduce((a,b) => b.endFull < a.endFull ? b : a);
+    const fastest = storageStats.reduce((a,b) => b.change > a.change ? b : a);
+    paragraphs.push(`<p><b>Storage:</b> <b>${highest.name}</b> currently has the highest fill level at
+      <b>${highest.endFull.toFixed(1)}%</b>, while <b>${lowest.name}</b> is lowest at
+      <b>${lowest.endFull.toFixed(1)}%</b>. <b>${fastest.name}</b> has filled fastest since 1 Jan 2026
+      (<b>+${fastest.change.toFixed(1)} pp</b>), consistent with typical summer injection season.</p>`);
   }
 
-  const fastest = stats.reduce((a,b) => b.change > a.change ? b : a);
-  const slowest = stats.reduce((a,b) => b.change < a.change ? b : a);
-  const highest = stats.reduce((a,b) => b.endFull > a.endFull ? b : a);
-  const lowest = stats.reduce((a,b) => b.endFull < a.endFull ? b : a);
+  const lngStats = COUNTRIES.map(c => {
+    const rows = (alsiSeries[c.code] || []).filter(r => num(r.sendOut, null) !== null);
+    if(rows.length === 0) return {name: c.name, hasTerminal: false};
+    const avgSendOut = rows.reduce((s,r) => s + num(r.sendOut), 0) / rows.length;
+    const util = lngUtilisation(alsiLatest[c.code]);
+    return {name: c.name, hasTerminal: true, avgSendOut, util};
+  });
 
-  box.innerHTML = `
-    <p><b>${highest.name}</b> currently has the highest fill level at <b>${highest.endFull.toFixed(1)}%</b>,
-    while <b>${lowest.name}</b> is lowest at <b>${lowest.endFull.toFixed(1)}%</b>.</p>
-    <p><b>${fastest.name}</b> gained the most storage since 1 Jan 2026
-    (<b>+${fastest.change.toFixed(1)} pp</b>), consistent with typical summer injection season behaviour.
-    <b>${slowest.name}</b> gained the least (<b>${slowest.change >= 0 ? "+" : ""}${slowest.change.toFixed(1)} pp</b>).</p>
-    <p>Current daily trend: ${stats.map(s => `<b>${s.name}</b> ${s.trend >= 0 ? "+" : ""}${s.trend.toFixed(2)}%/day`).join(" · ")}.</p>
-  `;
+  const withTerminal = lngStats.filter(s => s.hasTerminal && s.avgSendOut > 0);
+  const withoutTerminal = lngStats.filter(s => !s.hasTerminal || s.avgSendOut === 0);
+
+  if(withTerminal.length){
+    const busiest = withTerminal.reduce((a,b) => b.avgSendOut > a.avgSendOut ? b : a);
+    paragraphs.push(`<p><b>LNG:</b> <b>${busiest.name}</b> shows the highest average LNG send-out
+      (<b>${busiest.avgSendOut.toFixed(0)} GWh/day</b> since 1 Jan 2026)${busiest.util !== null
+        ? `, currently running at <b>${busiest.util.toFixed(0)}%</b> of declared terminal capacity`
+        : ""}.</p>`);
+  }
+  if(withoutTerminal.length){
+    paragraphs.push(`<p>${withoutTerminal.map(s => s.name).join(" and ")}
+      show little or no LNG send-out in this dataset &mdash;
+      either no active terminal is reporting, or flows are currently near zero.</p>`);
+  }
+
+  box.innerHTML = paragraphs.join("") || "Not enough data yet to compute insights.";
 }
 
-function renderTable(latest){
+function renderTable(latest, alsiLatest){
   const tbody = document.querySelector("#snapshotTable tbody");
   tbody.innerHTML = "";
   COUNTRIES.forEach(c => {
     const d = latest[c.code];
     if(!d) return;
+    const lng = alsiLatest[c.code];
+    const util = lngUtilisation(lng);
     tbody.insertAdjacentHTML("beforeend", `
       <tr>
         <td>${c.name}</td>
         <td>${d.gasDayStart}</td>
-        <td>${parseFloat(d.full).toFixed(2)}</td>
-        <td>${parseFloat(d.trend).toFixed(2)}</td>
-        <td>${parseFloat(d.gasInStorage).toFixed(2)}</td>
-        <td>${parseFloat(d.workingGasVolume).toFixed(2)}</td>
-        <td>${d.status}</td>
+        <td>${num(d.full).toFixed(2)}</td>
+        <td>${num(d.trend).toFixed(2)}</td>
+        <td>${lng ? num(lng.sendOut).toFixed(1) : "&mdash;"}</td>
+        <td>${util !== null ? util.toFixed(1) : "&mdash;"}</td>
       </tr>
     `);
   });
@@ -230,14 +271,17 @@ async function loadAll(){
     if(!res.ok) throw new Error("HTTP " + res.status + " while fetching data.json");
     const json = await res.json();
 
-    renderCards(json.latest);
+    const alsiLatest = json.alsi_latest || {};
+    const alsiSeries = json.alsi_series || {};
+
+    renderCards(json.latest, alsiLatest);
     renderFullChart(json.series);
-    renderNetChart(json.series);
-    renderInsights(json.latest, json.series);
-    renderTable(json.latest);
+    renderLngChart(alsiSeries);
+    renderInsights(json.latest, json.series, alsiLatest, alsiSeries);
+    renderTable(json.latest, alsiLatest);
 
     statusMsg(
-      `Data last generated: ${json.generated_at} · range: ${json.from_date || "n/a"} → live · auto-updated daily via GitHub Actions`,
+      `Data last generated: ${json.generated_at} \u00b7 range: ${json.from_date || "n/a"} \u2192 live \u00b7 auto-updated daily via GitHub Actions`,
       "ok"
     );
   }catch(err){
