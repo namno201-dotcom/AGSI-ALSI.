@@ -6,13 +6,40 @@ COUNTRIES = [("DE", "Germany"), ("BE", "Belgium"), ("NL", "Netherlands")]
 HEADERS = {"x-key": API_KEY}
 START_DATE = "2026-01-01"
 
-def fetch(base_url, code, **params):
-    r = requests.get(base_url, params={"country": code, **params}, headers=HEADERS)
+
+def fetch_paginated(base_url, code, **params):
+    """Fetch all pages for a date range that might exceed 300 rows."""
+    all_rows = []
+    page = 1
+    while True:
+        r = requests.get(
+            base_url,
+            params={"country": code, "size": "300", "page": str(page), **params},
+            headers=HEADERS,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if data.get("error"):
+            raise RuntimeError(f"{base_url} {code}: {data.get('message')}")
+        all_rows.extend(data["data"])
+        if page >= data.get("last_page", 1):
+            break
+        page += 1
+    return all_rows
+
+
+def fetch_latest(base_url, code):
+    r = requests.get(
+        base_url,
+        params={"country": code, "reverse": "true", "size": "1"},
+        headers=HEADERS,
+    )
     r.raise_for_status()
     data = r.json()
     if data.get("error"):
         raise RuntimeError(f"{base_url} {code}: {data.get('message')}")
-    return data["data"]
+    return data["data"][0]
+
 
 today = date.today().isoformat()
 
@@ -27,16 +54,16 @@ result = {
 
 for code, name in COUNTRIES:
     # AGSI - underground gas storage
-    result["latest"][code] = fetch("https://agsi.gie.eu/api", code, reverse="true", size="1")[0]
-    result["series"][code] = fetch(
-        "https://agsi.gie.eu/api", code, **{"from": START_DATE, "to": today, "size": "300"}
+    result["latest"][code] = fetch_latest("https://agsi.gie.eu/api", code)
+    result["series"][code] = fetch_paginated(
+        "https://agsi.gie.eu/api", code, **{"from": START_DATE, "to": today}
     )
 
     # ALSI - LNG terminals
     try:
-        result["alsi_latest"][code] = fetch("https://alsi.gie.eu/api", code, reverse="true", size="1")[0]
-        result["alsi_series"][code] = fetch(
-            "https://alsi.gie.eu/api", code, **{"from": START_DATE, "to": today, "size": "300"}
+        result["alsi_latest"][code] = fetch_latest("https://alsi.gie.eu/api", code)
+        result["alsi_series"][code] = fetch_paginated(
+            "https://alsi.gie.eu/api", code, **{"from": START_DATE, "to": today}
         )
     except Exception as e:
         # some countries may not operate an LNG terminal - don't fail the whole run
