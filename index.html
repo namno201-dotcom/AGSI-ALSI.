@@ -70,9 +70,9 @@
 
 <h2>LNG send-out <span class="section-tag">ALSI &middot; GWh/day</span></h2>
 <div class="chart-wrap">
-  <canvas id="lngChart" role="img" aria-label="Bar chart of daily LNG terminal send-out for Germany, Belgium and Netherlands"></canvas>
+  <canvas id="lngChart" role="img" aria-label="Line chart of daily LNG terminal send-out for Germany, Belgium and Netherlands"></canvas>
 </div>
-<p class="note">Send-out = gas flow leaving the LNG terminal after regasification. A country with no active LNG terminal will show flat zero — this does not indicate a data error.</p>
+<p class="note">Send-out = gas flow leaving the LNG terminal after regasification. Germany currently reports no active LNG terminal in this dataset, so its line will stay flat at zero — this does not indicate a data error.</p>
 
 <h2>Insights</h2>
 <div class="insight" id="insightBox">Calculating...</div>
@@ -176,12 +176,14 @@ function renderLngChart(alsiSeries){
       label: c.name,
       data: rows.map(r => ({x: r.gasDayStart, y: num(r.sendOut)})),
       borderColor: c.color,
-      backgroundColor: c.color,
-      borderWidth: 0
+      backgroundColor: c.color + "1a",
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.2
     };
   });
   new Chart(ctx, {
-    type: "bar",
+    type: "line",
     data: { datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
