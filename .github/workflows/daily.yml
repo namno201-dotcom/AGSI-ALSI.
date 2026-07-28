@@ -1,0 +1,17 @@
+name: Update gas storage data
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install requests
+      - run: python fetch_data.py
+        env:
+          AGSI_API_KEY: ${{ secrets.AGSI_API_KEY }}
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Cập nhật dữ liệu hàng ngày"
